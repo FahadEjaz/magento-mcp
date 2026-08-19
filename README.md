@@ -1,5 +1,7 @@
 # magento-mcp
 
+[![npm](https://img.shields.io/npm/v/@fahadhussain777/magento-mcp)](https://www.npmjs.com/package/@fahadhussain777/magento-mcp)
+
 MCP server exposing a Magento 2 store to AI assistants via:
 
 - **REST Admin API** — catalog, orders, customers, CMS, inventory, promotions, store config (write tools require `confirm: true`), authenticated via OAuth 1.0a against a Magento Integration
@@ -30,6 +32,8 @@ Also exposes one MCP resource: `magento://store/config` (store configuration —
 
 ## Setup
 
+Published on npm as [`@fahadhussain777/magento-mcp`](https://www.npmjs.com/package/@fahadhussain777/magento-mcp) — no clone/build needed for normal use. Skip to step 5 to register it via `npx` directly, or follow from step 1 if you're developing on this repo instead.
+
 1. `npm install`
 2. Copy `.env.example` to `.env` and fill in:
    - `MAGENTO_BASE_URL` plus OAuth 1.0a credentials from a Magento **Integration** (System → Extensions → Integrations → Add New Integration): `MAGENTO_CONSUMER_KEY`, `MAGENTO_CONSUMER_SECRET`, `MAGENTO_ACCESS_TOKEN`, `MAGENTO_ACCESS_TOKEN_SECRET`. Grant the Integration only the API resources this server actually needs — Magento shows you these four values once, when you Activate it. This avoids the 2FA restriction that blocks admin-user password auth, and is the least-privilege approach besides.
@@ -40,15 +44,15 @@ Also exposes one MCP resource: `magento://store/config` (store configuration —
      FLUSH PRIVILEGES;
      ```
      Do not grant this user INSERT/UPDATE/DELETE/DDL under any circumstance — the application-level query guard (`src/db/guard.ts`) is defense in depth, not the safety boundary.
-3. `npm run build`
+3. `npm run build` (skip if using the published package via `npx` — step 5)
 4. `npm run test:connections` — sanity-checks REST auth, GraphQL, and the DB connection against the values in `.env` before wiring the server into an assistant. See **Local dev with self-signed certs** below if this fails on TLS.
 5. Register with Claude Desktop/Code, e.g. in `claude_desktop_config.json`:
    ```json
    {
      "mcpServers": {
        "magento": {
-         "command": "node",
-         "args": ["/var/www/html/magentoMCP/dist/index.js"],
+         "command": "npx",
+         "args": ["-y", "@fahadhussain777/magento-mcp"],
          "env": {
            "MAGENTO_BASE_URL": "...",
            "MAGENTO_CONSUMER_KEY": "...",
@@ -68,6 +72,18 @@ Also exposes one MCP resource: `magento://store/config` (store configuration —
    }
    ```
    The `MAGENTO_DB_SSH_*` fields are only needed when tunneling the DB connection over SSH — omit them entirely (not just leave blank) to connect directly, as before. See "Reaching a remote/firewalled DB" below.
+
+   If developing on this repo instead of using the published package, swap `"command": "npx", "args": ["-y", "@fahadhussain777/magento-mcp"]` for `"command": "node", "args": ["/path/to/magentoMCP/dist/index.js"]` (after `npm run build`) so you're running your local changes instead of the published version.
+
+## Publishing
+
+Published at [npmjs.com/package/@fahadhussain777/magento-mcp](https://www.npmjs.com/package/@fahadhussain777/magento-mcp). To publish a new version:
+
+1. Bump `version` in `package.json` (semver) — npm rejects re-publishing an existing version.
+2. Make sure you're logged in as the intended npm account: `npm whoami` (or `npm login`).
+3. `npm publish` — `prepublishOnly` (typecheck + test + build) runs automatically first and aborts the publish if any of them fail. The package is scoped with `publishConfig.access: "public"` already set, so this publishes publicly on the free tier without needing `--access public` on the command line.
+
+To test a packed tarball locally without touching the registry: `npm pack`, then `npm install /path/to/the/tarball.tgz` in a scratch project.
 
 ## Development
 

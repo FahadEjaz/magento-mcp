@@ -10,6 +10,8 @@ Guidance for Claude Code (or any AI agent) working in this repo.
 2. **GraphQL** (`src/graphql/`, `src/tools/graphql-catalog.ts`) — storefront-shaped queries
 3. **Direct read-only MySQL** (`src/db/`, `src/tools/db-query.ts`) — analytical insight not available via REST/GraphQL; the DB connection is optionally tunneled over SSH (`src/db/ssh-tunnel.ts`) when `MAGENTO_DB_SSH_HOST` is set
 
+Published on npm as [`@fahadhussain777/magento-mcp`](https://www.npmjs.com/package/@fahadhussain777/magento-mcp) — bump `version` in `package.json` before every `npm publish` (npm rejects re-publishing an existing version), and never publish without running `npm test`/`npm run typecheck` first (`prepublishOnly` does this automatically, don't remove it).
+
 Full design rationale lives in `/home/fahad/.claude/plans/i-want-to-create-sorted-rain.md` (the approved implementation plan). Development phases and status are tracked in `PROGRESS.md` — read it first to see what's done and what's next.
 
 ## Non-negotiable rules

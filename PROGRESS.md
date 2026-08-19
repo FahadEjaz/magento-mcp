@@ -81,8 +81,16 @@ User-requested: ability to reach the Magento DB when it isn't on the same host/n
 
 ## Phase 4 — Packaging & distribution
 
-- [ ] Decide distribution path: private/internal use only vs. `npx magento-mcp` npm publish vs. MCPB bundle
-- [ ] If publishing: package metadata, LICENSE, README polish, version pinning strategy for `@modelcontextprotocol/sdk`
+**Decided (2026-08-19):** publish as a scoped npm package, `npx`-installable — not private/internal-only, not an MCPB bundle (for now). `npm view magento-mcp` showed the unscoped name is already taken by an unrelated package, so went with `@fahadhussain777/magento-mcp` (always available under the user's own npm account, no collision risk).
+
+- [x] `package.json`: renamed to `@fahadhussain777/magento-mcp`, added `license: MIT`, `author`, `keywords`, `publishConfig.access: "public"` (required for a scoped package to publish for free — otherwise npm defaults scoped packages to private/paid), `prepublishOnly` script (typecheck + test + build, runs automatically before `npm publish`). `bin` command name stays `magento-mcp` (independent of the scoped package name — that's normal and fine).
+- [x] `LICENSE` (MIT) added.
+- [x] Verified end-to-end, not just configured: `npm pack` → tarball contents inspected (LICENSE, README.md, dist/index.js + map, package.json — 5 files, 25.8kB packed) → installed the tarball into a scratch project with `npm install <tarball>` → confirmed all runtime deps resolve → ran the installed `node_modules/.bin/magento-mcp` bin directly and confirmed it boots ("magento-mcp server running on stdio") with dummy env, same as the in-repo dev flow.
+- [x] `README.md`: added a **Publishing** section (login, prepublishOnly, `npm publish` with the scoped-public flow, version-bump reminder, local tarball-testing instructions) and a note in Setup step 5 that `npx -y @fahadhussain777/magento-mcp` becomes available as a config option once actually published.
+- [x] **Published to the npm registry** (2026-08-19) — `@fahadhussain777/magento-mcp@0.1.0` is live: `npm view @fahadhussain777/magento-mcp` confirms it, and `npx -y @fahadhussain777/magento-mcp` was run against the real registry (not the local tarball) with dummy env and confirmed it boots ("magento-mcp server running on stdio").
+  - Along the way, hit and diagnosed a false alarm: `npx -y @fahadhussain777/magento-mcp` failed once with `sh: 1: magento-mcp: not found` right after an `npm cache clean --force` — re-ran with verbose logging from a clean directory and it worked correctly (reached the app's own "Missing required env var" error, i.e. bin resolution was fine). Treated as a one-off cache-clean-timing fluke, not a real packaging bug — the tarball's `bin` entry, permissions, and `npm install <tarball>` path had already been verified working before publish.
+  - `README.md` Setup section now leads with `npx` (published package) as the primary path, source-build (`npm install` + `npm run build` + local `node dist/index.js`) as the alternative for developing on this repo. Publishing section rewritten past-tense with the actual npm link. Added an npm version badge.
+- [ ] Version pinning strategy for `@modelcontextprotocol/sdk`: left as `^1.12.0` (standard caret range) — no active reason found to pin tighter; revisit only if an SDK release breaks something.
 - [ ] `git init` + first commit (manual — see CLAUDE.md: never auto-commit)
 
 ## Phase 5 — Optional expansion (only if needed)

@@ -1,8 +1,21 @@
 {
-  "name": "magento-mcp",
-  "version": "0.1.0",
+  "name": "@fahadhussain777/magento-mcp",
+  "version": "0.1.01",
   "description": "MCP server exposing Magento 2 REST, GraphQL, and read-only DB access to AI assistants",
   "type": "module",
+  "license": "MIT",
+  "author": "Fahad Hussain <fahad@devteampro.com>",
+  "keywords": [
+    "mcp",
+    "magento",
+    "magento2",
+    "model-context-protocol",
+    "claude",
+    "ai-agent"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "magento-mcp": "dist/index.js"
   },
@@ -13,10 +26,13 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:connections": "node scripts/test-connections.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18"
