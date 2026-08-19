@@ -1,6 +1,6 @@
 {
   "name": "@fahadhussain777/magento-mcp",
-  "version": "0.1.01",
+  "version": "0.1.3",
   "description": "MCP server exposing Magento 2 REST, GraphQL, and read-only DB access to AI assistants",
   "type": "module",
   "license": "MIT",
@@ -15,6 +15,14 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FahadEjaz/magento-mcp.git"
+  },
+  "homepage": "https://github.com/FahadEjaz/magento-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/FahadEjaz/magento-mcp/issues"
   },
   "bin": {
     "magento-mcp": "dist/index.js"

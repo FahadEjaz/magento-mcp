@@ -30,23 +30,26 @@ MCP server exposing a Magento 2 store to AI assistants via:
 
 Also exposes one MCP resource: `magento://store/config` (store configuration — currencies, locales, store views, base URLs).
 
-## Setup
+## Prerequisites
 
-Published on npm as [`@fahadhussain777/magento-mcp`](https://www.npmjs.com/package/@fahadhussain777/magento-mcp) — no clone/build needed for normal use. Skip to step 5 to register it via `npx` directly, or follow from step 1 if you're developing on this repo instead.
+- Node.js >= 18
+- A Magento 2 store (Open Source or Adobe Commerce) with REST/GraphQL enabled
+- A Magento **Integration** for OAuth 1.0a credentials (see Quick Start below) — admin-user password auth is not supported
+- MySQL/MariaDB network access to the Magento database, for the read-only SQL tools (optional — the REST/GraphQL tools work without it)
 
-1. `npm install`
-2. Copy `.env.example` to `.env` and fill in:
-   - `MAGENTO_BASE_URL` plus OAuth 1.0a credentials from a Magento **Integration** (System → Extensions → Integrations → Add New Integration): `MAGENTO_CONSUMER_KEY`, `MAGENTO_CONSUMER_SECRET`, `MAGENTO_ACCESS_TOKEN`, `MAGENTO_ACCESS_TOKEN_SECRET`. Grant the Integration only the API resources this server actually needs — Magento shows you these four values once, when you Activate it. This avoids the 2FA restriction that blocks admin-user password auth, and is the least-privilege approach besides.
-   - `MAGENTO_DB_*` — **must** point at a MySQL user with `SELECT`-only grants:
-     ```sql
-     CREATE USER 'mcp_readonly'@'%' IDENTIFIED BY 'change_me';
-     GRANT SELECT ON magento_db.* TO 'mcp_readonly'@'%';
-     FLUSH PRIVILEGES;
-     ```
-     Do not grant this user INSERT/UPDATE/DELETE/DDL under any circumstance — the application-level query guard (`src/db/guard.ts`) is defense in depth, not the safety boundary.
-3. `npm run build` (skip if using the published package via `npx` — step 5)
-4. `npm run test:connections` — sanity-checks REST auth, GraphQL, and the DB connection against the values in `.env` before wiring the server into an assistant. See **Local dev with self-signed certs** below if this fails on TLS.
-5. Register with Claude Desktop/Code, e.g. in `claude_desktop_config.json`:
+## Quick Start (using the published package)
+
+No clone or build needed — this installs and runs on demand via `npx`.
+
+1. In Magento Admin: System → Extensions → Integrations → Add New Integration. Grant it only the API resources this server actually needs, then Activate it to get four OAuth 1.0a values (shown once): consumer key/secret, access token/secret. This also sidesteps the 2FA restriction that blocks admin-user password auth.
+2. If using the DB tools, create a `SELECT`-only MySQL user:
+   ```sql
+   CREATE USER 'mcp_readonly'@'%' IDENTIFIED BY 'change_me';
+   GRANT SELECT ON magento_db.* TO 'mcp_readonly'@'%';
+   FLUSH PRIVILEGES;
+   ```
+   Do not grant this user INSERT/UPDATE/DELETE/DDL under any circumstance — the application-level query guard (`src/db/guard.ts`) is defense in depth, not the safety boundary.
+3. Register with Claude Desktop/Code, e.g. in `claude_desktop_config.json`:
    ```json
    {
      "mcpServers": {
@@ -71,9 +74,15 @@ Published on npm as [`@fahadhussain777/magento-mcp`](https://www.npmjs.com/packa
      }
    }
    ```
-   The `MAGENTO_DB_SSH_*` fields are only needed when tunneling the DB connection over SSH — omit them entirely (not just leave blank) to connect directly, as before. See "Reaching a remote/firewalled DB" below.
+   The `MAGENTO_DB_SSH_*` fields are only needed when tunneling the DB connection over SSH — omit them entirely (not just leave blank) to connect directly. See "Reaching a remote/firewalled DB" below.
 
-   If developing on this repo instead of using the published package, swap `"command": "npx", "args": ["-y", "@fahadhussain777/magento-mcp"]` for `"command": "node", "args": ["/path/to/magentoMCP/dist/index.js"]` (after `npm run build`) so you're running your local changes instead of the published version.
+## Development (working on this repo)
+
+1. `npm install`
+2. Copy `.env.example` to `.env` and fill in the same OAuth/DB values as Quick Start above.
+3. `npm run build`
+4. `npm run test:connections` — sanity-checks REST auth, GraphQL, and the DB connection against the values in `.env`. See **Local dev with self-signed certs** below if this fails on TLS.
+5. In `claude_desktop_config.json`, use `"command": "node", "args": ["/path/to/magentoMCP/dist/index.js"]` instead of the `npx` form, so you're running your local changes instead of the published version.
 
 ## Publishing
 
@@ -85,7 +94,7 @@ Published at [npmjs.com/package/@fahadhussain777/magento-mcp](https://www.npmjs.
 
 To test a packed tarball locally without touching the registry: `npm pack`, then `npm install /path/to/the/tarball.tgz` in a scratch project.
 
-## Development
+## Development scripts
 
 - `npm run dev` — run directly from TS source via `tsx`
 - `npm run typecheck`
@@ -112,3 +121,7 @@ or set `NODE_EXTRA_CA_CERTS` in the environment your MCP client launches the ser
 - Every destructive REST tool (`update_product`, `delete_product`, `cancel_order`, `refund_order`, `update_customer`, `delete_customer`, `update_stock_item`, `set_config_value`) previews the action and no-ops unless called with `confirm: true`.
 - `run_readonly_sql` only accepts a single `SELECT` statement, rejects DML/DDL keywords and sensitive tables (`admin_user`, etc.), and injects/caps a `LIMIT` — see `src/db/guard.ts`. This is on top of, not instead of, the DB user's SELECT-only grants.
 - Query timeout and row cap are configurable via `MAGENTO_DB_QUERY_TIMEOUT_MS` / `MAGENTO_DB_MAX_ROWS` in `.env`.
+
+## Issues & contributing
+
+Bugs and feature requests: [github.com/FahadEjaz/magento-mcp/issues](https://github.com/FahadEjaz/magento-mcp/issues). MIT licensed — see [LICENSE](LICENSE).
