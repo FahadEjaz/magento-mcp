@@ -1,0 +1,9 @@
+process.env.MAGENTO_BASE_URL ??= "https://example.test";
+process.env.MAGENTO_CONSUMER_KEY ??= "test-consumer-key";
+process.env.MAGENTO_CONSUMER_SECRET ??= "test-consumer-secret";
+process.env.MAGENTO_ACCESS_TOKEN ??= "test-access-token";
+process.env.MAGENTO_ACCESS_TOKEN_SECRET ??= "test-access-token-secret";
+process.env.MAGENTO_DB_HOST ??= "127.0.0.1";
+process.env.MAGENTO_DB_NAME ??= "test";
+process.env.MAGENTO_DB_READONLY_USER ??= "test";
+process.env.MAGENTO_DB_READONLY_PASSWORD ??= "test";

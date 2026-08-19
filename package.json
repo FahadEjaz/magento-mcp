@@ -1,0 +1,42 @@
+{
+  "name": "magento-mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing Magento 2 REST, GraphQL, and read-only DB access to AI assistants",
+  "type": "module",
+  "bin": {
+    "magento-mcp": "dist/index.js"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:connections": "node scripts/test-connections.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "dotenv": "^16.4.5",
+    "graphql": "^16.9.0",
+    "graphql-request": "^7.1.2",
+    "mysql2": "^3.11.4",
+    "oauth-1.0a": "^2.2.6",
+    "ssh2": "^1.17.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "@types/ssh2": "^1.15.5",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}
