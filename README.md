@@ -76,6 +76,8 @@ No clone or build needed — this installs and runs on demand via `npx`.
    ```
    The `MAGENTO_DB_SSH_*` fields are only needed when tunneling the DB connection over SSH — omit them entirely (not just leave blank) to connect directly. See "Reaching a remote/firewalled DB" below.
 
+   If REST calls fail with `{"message":"Signature method %1 is not supported","parameters":["HMAC-SHA1"]}`, add `"MAGENTO_OAUTH_SIGNATURE_METHOD": "HMAC-SHA256"` to the `env` block — Magento instances vary on which OAuth1 signature method they accept (defaults to `HMAC-SHA1` if unset). Check Magento Admin under Stores → Configuration → Services → OAuth if unsure which one a given instance requires.
+
 ## Development (working on this repo)
 
 1. `npm install`
@@ -111,6 +113,15 @@ NODE_EXTRA_CA_CERTS=$(mkcert -CAROOT)/rootCA.pem npm run dev
 ```
 
 or set `NODE_EXTRA_CA_CERTS` in the environment your MCP client launches the server with (e.g. the `env` block in `claude_desktop_config.json`). Also double-check `MAGENTO_BASE_URL` actually matches a hostname the certificate covers (`ERR_TLS_CERT_ALTNAME_INVALID` means it doesn't) — local Magento setups often have several `*.local`/`*.example.com` hostnames configured and only one has a matching cert.
+
+**Docker-based setups (e.g. Warden, `markoshust/magento-docker`)**: the container itself may generate its own mkcert CA independently of your host's `mkcert -CAROOT` — if so, the CA cert lives inside the container, not on the host, and gets regenerated (new CA, still `UNABLE_TO_VERIFY_LEAF_SIGNATURE` even with a previously-working `NODE_EXTRA_CA_CERTS` path) whenever the container is recreated. Pull the current one out with:
+
+```
+docker exec <nginx-container> find / -iname '*mkcert*.crt' 2>/dev/null
+docker cp <nginx-container>:<path-from-above> ./magento-dev-ca.pem
+```
+
+then point `NODE_EXTRA_CA_CERTS` at that file. Also worth checking after any container restart: `docker inspect <db-container> --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'` — container IPs on the Docker bridge network can change across restarts, so a previously-working `MAGENTO_DB_HOST` may go stale (`ECONNREFUSED`) even though nothing in `.env` looks wrong.
 
 ## Reaching a remote/firewalled DB (SSH tunnel)
 

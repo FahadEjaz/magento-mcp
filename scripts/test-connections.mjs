@@ -2,11 +2,17 @@ import "dotenv/config";
 import crypto from "node:crypto";
 import OAuth from "oauth-1.0a";
 
+const SIGNATURE_METHOD = process.env.MAGENTO_OAUTH_SIGNATURE_METHOD ?? "HMAC-SHA1";
+const NODE_HASH_ALGORITHM = { "HMAC-SHA1": "sha1", "HMAC-SHA256": "sha256" }[SIGNATURE_METHOD];
+if (!NODE_HASH_ALGORITHM) {
+  throw new Error(`Invalid MAGENTO_OAUTH_SIGNATURE_METHOD: "${SIGNATURE_METHOD}"`);
+}
+
 function oauthHeader(url, method) {
   const oauth = new OAuth({
     consumer: { key: process.env.MAGENTO_CONSUMER_KEY, secret: process.env.MAGENTO_CONSUMER_SECRET },
-    signature_method: "HMAC-SHA1",
-    hash_function: (baseString, key) => crypto.createHmac("sha1", key).update(baseString).digest("base64"),
+    signature_method: SIGNATURE_METHOD,
+    hash_function: (baseString, key) => crypto.createHmac(NODE_HASH_ALGORITHM, key).update(baseString).digest("base64"),
   });
   const token = { key: process.env.MAGENTO_ACCESS_TOKEN, secret: process.env.MAGENTO_ACCESS_TOKEN_SECRET };
   return oauth.toHeader(oauth.authorize({ url, method }, token));
@@ -14,7 +20,7 @@ function oauthHeader(url, method) {
 
 async function testRest() {
   const base = process.env.MAGENTO_BASE_URL;
-  const url = `${base}/rest/V1/store/storeConfigs`;
+  const url = `${base}/rest/V1/store/websites`;
   try {
     const res = await fetch(url, {
       method: "GET",

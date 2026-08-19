@@ -42,6 +42,19 @@ function buildSshConfig(): SshTunnelConfig | null {
   };
 }
 
+export type OAuthSignatureMethod = "HMAC-SHA1" | "HMAC-SHA256";
+
+function buildOAuthSignatureMethod(): OAuthSignatureMethod {
+  const value = process.env.MAGENTO_OAUTH_SIGNATURE_METHOD ?? "HMAC-SHA1";
+  if (value !== "HMAC-SHA1" && value !== "HMAC-SHA256") {
+    throw new Error(
+      `Invalid MAGENTO_OAUTH_SIGNATURE_METHOD: "${value}" — must be "HMAC-SHA1" or "HMAC-SHA256" ` +
+        `(check Magento Admin > System > Integrations, or Stores > Configuration > Services > OAuth, for which one this instance requires).`
+    );
+  }
+  return value;
+}
+
 export const config = {
   magento: {
     baseUrl: required("MAGENTO_BASE_URL").replace(/\/+$/, ""),
@@ -49,6 +62,9 @@ export const config = {
     consumerSecret: required("MAGENTO_CONSUMER_SECRET"),
     accessToken: required("MAGENTO_ACCESS_TOKEN"),
     accessTokenSecret: required("MAGENTO_ACCESS_TOKEN_SECRET"),
+    // Magento instances vary on which OAuth1 signature method they accept —
+    // recent versions commonly require HMAC-SHA256, older ones HMAC-SHA1.
+    oauthSignatureMethod: buildOAuthSignatureMethod(),
   },
   db: {
     host: required("MAGENTO_DB_HOST"),
