@@ -18,9 +18,13 @@ const FORBIDDEN_KEYWORDS = [
   "call ",
   "exec ",
   "execute ",
+  "sleep",
+  "benchmark",
+  "get_lock",
+  "procedure analyse",
 ];
 
-const SENSITIVE_TABLES = ["admin_user", "admin_passwords", "oauth_token"];
+const SENSITIVE_TABLES = ["admin_user", "admin_passwords", "oauth_token", "oauth_consumer", "integration"];
 
 export class QueryRejectedError extends Error {
   constructor(reason: string) {
@@ -96,7 +100,7 @@ export function assertSafeSelect(rawSql: string): string {
 const LIMIT_PATTERN = /\blimit\s+(\d+)\s*(?:(,)\s*(\d+)|(offset)\s+(\d+))?\s*$/i;
 
 function enforceLimit(sql: string): string {
-  const maxRows = config.db.maxRows;
+  const maxRows = config.db?.maxRows ?? 500;
   const match = sql.match(LIMIT_PATTERN);
 
   if (!match) {

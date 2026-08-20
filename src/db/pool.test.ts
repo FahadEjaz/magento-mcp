@@ -31,7 +31,7 @@ describe("runReadOnlyQuery", () => {
 
     expect(mockConnection.query).toHaveBeenNthCalledWith(
       1,
-      `SET SESSION MAX_EXECUTION_TIME=${config.db.queryTimeoutMs}`
+      `SET SESSION MAX_EXECUTION_TIME=${config.db!.queryTimeoutMs}`
     );
     expect(mockConnection.query).toHaveBeenNthCalledWith(
       2,
@@ -100,7 +100,7 @@ describe("runReadOnlyQuery timeout fallback (isolated module state)", () => {
 
     expect(freshConnection.query).toHaveBeenNthCalledWith(
       2,
-      `SET SESSION max_statement_time=${Math.ceil(freshConfig.db.queryTimeoutMs / 1000)}`
+      `SET SESSION max_statement_time=${Math.ceil(freshConfig.db!.queryTimeoutMs / 1000)}`
     );
     expect(result).toEqual({ rows: [{ sku: "ABC" }], fields: ["sku"] });
 
@@ -164,8 +164,8 @@ describe("runReadOnlyQuery with an SSH tunnel configured (isolated module state)
 
     expect(openSshTunnel).toHaveBeenCalledWith(
       expect.objectContaining({ host: "bastion.example.com", username: "deploy", password: "hunter2" }),
-      freshConfig.db.host,
-      freshConfig.db.port
+      freshConfig.db!.host,
+      freshConfig.db!.port
     );
     expect(createPool).toHaveBeenCalledWith(expect.objectContaining({ host: "127.0.0.1", port: 54321 }));
   });

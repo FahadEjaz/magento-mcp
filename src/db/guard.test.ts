@@ -42,6 +42,15 @@ describe("assertSafeSelect", () => {
 
   it("rejects access to sensitive tables", () => {
     expect(() => assertSafeSelect("SELECT * FROM admin_user")).toThrow(QueryRejectedError);
+    expect(() => assertSafeSelect("SELECT * FROM oauth_consumer")).toThrow(QueryRejectedError);
+    expect(() => assertSafeSelect("SELECT * FROM integration")).toThrow(QueryRejectedError);
+  });
+
+  it("rejects timing/DoS primitives", () => {
+    expect(() => assertSafeSelect("SELECT SLEEP(300)")).toThrow(QueryRejectedError);
+    expect(() => assertSafeSelect("SELECT BENCHMARK(1000000000, MD5('x'))")).toThrow(QueryRejectedError);
+    expect(() => assertSafeSelect("SELECT GET_LOCK('x', 300)")).toThrow(QueryRejectedError);
+    expect(() => assertSafeSelect("SELECT * FROM sales_order PROCEDURE ANALYSE()")).toThrow(QueryRejectedError);
   });
 
   it("rejects empty input", () => {

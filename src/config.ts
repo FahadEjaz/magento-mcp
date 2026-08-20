@@ -42,6 +42,39 @@ function buildSshConfig(): SshTunnelConfig | null {
   };
 }
 
+export interface DbConfig {
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+  queryTimeoutMs: number;
+  maxRows: number;
+  poolSize: number;
+  ssh: SshTunnelConfig | null;
+}
+
+function buildDbConfig(): DbConfig | null {
+  const host = process.env.MAGENTO_DB_HOST;
+  if (!host) {
+    return null;
+  }
+
+  return {
+    host,
+    port: Number(process.env.MAGENTO_DB_PORT ?? 3306),
+    database: required("MAGENTO_DB_NAME"),
+    user: required("MAGENTO_DB_READONLY_USER"),
+    password: required("MAGENTO_DB_READONLY_PASSWORD"),
+    queryTimeoutMs: Number(process.env.MAGENTO_DB_QUERY_TIMEOUT_MS ?? 5000),
+    maxRows: Number(process.env.MAGENTO_DB_MAX_ROWS ?? 500),
+    poolSize: Number(process.env.MAGENTO_DB_POOL_SIZE ?? 3),
+    // If set, MAGENTO_DB_HOST/PORT above are reached THROUGH this SSH tunnel
+    // (i.e. as seen from the SSH host) instead of connected to directly.
+    ssh: buildSshConfig(),
+  };
+}
+
 export type OAuthSignatureMethod = "HMAC-SHA1" | "HMAC-SHA256";
 
 function buildOAuthSignatureMethod(): OAuthSignatureMethod {
@@ -66,17 +99,6 @@ export const config = {
     // recent versions commonly require HMAC-SHA256, older ones HMAC-SHA1.
     oauthSignatureMethod: buildOAuthSignatureMethod(),
   },
-  db: {
-    host: required("MAGENTO_DB_HOST"),
-    port: Number(process.env.MAGENTO_DB_PORT ?? 3306),
-    database: required("MAGENTO_DB_NAME"),
-    user: required("MAGENTO_DB_READONLY_USER"),
-    password: required("MAGENTO_DB_READONLY_PASSWORD"),
-    queryTimeoutMs: Number(process.env.MAGENTO_DB_QUERY_TIMEOUT_MS ?? 5000),
-    maxRows: Number(process.env.MAGENTO_DB_MAX_ROWS ?? 500),
-    poolSize: Number(process.env.MAGENTO_DB_POOL_SIZE ?? 3),
-    // If set, MAGENTO_DB_HOST/PORT above are reached THROUGH this SSH tunnel
-    // (i.e. as seen from the SSH host) instead of connected to directly.
-    ssh: buildSshConfig(),
-  },
+  // null when MAGENTO_DB_HOST is unset — REST/GraphQL-only mode, DB tools disabled.
+  db: buildDbConfig(),
 };

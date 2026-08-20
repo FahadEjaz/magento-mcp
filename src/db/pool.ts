@@ -11,13 +11,20 @@ let poolPromise: Promise<mysql.Pool> | null = null;
 let tunnelHandle: TunnelHandle | null = null;
 
 async function initPool(): Promise<mysql.Pool> {
-  let host = config.db.host;
-  let port = config.db.port;
+  if (!config.db) {
+    throw new Error(
+      "DB access is not configured (MAGENTO_DB_HOST unset) — this server is running REST/GraphQL-only."
+    );
+  }
+  const db = config.db;
 
-  if (config.db.ssh) {
+  let host = db.host;
+  let port = db.port;
+
+  if (db.ssh) {
     // MAGENTO_DB_HOST/PORT are reached through the tunnel, as seen from the
     // SSH host — the pool itself connects to a local forwarded port instead.
-    tunnelHandle = await openSshTunnel(config.db.ssh, config.db.host, config.db.port);
+    tunnelHandle = await openSshTunnel(db.ssh, db.host, db.port);
     host = "127.0.0.1";
     port = tunnelHandle.localPort;
   }
@@ -25,10 +32,10 @@ async function initPool(): Promise<mysql.Pool> {
   return mysql.createPool({
     host,
     port,
-    database: config.db.database,
-    user: config.db.user,
-    password: config.db.password,
-    connectionLimit: config.db.poolSize,
+    database: db.database,
+    user: db.user,
+    password: db.password,
+    connectionLimit: db.poolSize,
     // These are analytical/read-only queries against a live Magento primary —
     // fail fast rather than let a slow query hold a connection indefinitely.
     connectTimeout: 10_000,
@@ -56,7 +63,7 @@ type TimeoutStrategy = "mysql" | "mariadb" | "none";
 let cachedTimeoutStrategy: TimeoutStrategy | null = null;
 
 async function applyQueryTimeout(connection: mysql.PoolConnection): Promise<void> {
-  const ms = config.db.queryTimeoutMs;
+  const ms = config.db?.queryTimeoutMs ?? 5000;
 
   if (cachedTimeoutStrategy === "mysql" || cachedTimeoutStrategy === null) {
     try {

@@ -95,6 +95,15 @@ User-requested: ability to reach the Magento DB when it isn't on the same host/n
 - [x] Package metadata polish (2026-08-19): added `repository`/`homepage`/`bugs` to `package.json` pointing at the GitHub repo (npm's package page now links back to it). README restructured into **Prerequisites** / **Quick Start** (npx, consumer-facing) / **Development** (repo-facing) instead of one mixed numbered list; added an **Issues & contributing** footer.
 - **Note:** at some point outside this session's tracking, the user bumped `package.json` version to `"0.1.02"` and attempted to publish — invalid semver (leading zero), npm silently normalized it to `0.1.2`, which was already published (registry had `0.1.0`/`0.1.1`/`0.1.2` by then from the user's own publishes), so the publish had no effect. Diagnosed via `npm publish --dry-run` (showed the auto-correct warning) and fixed by bumping to a genuinely new version. Current published version at last check: `0.1.3`; `package.json` locally is at `0.1.4` (user-edited, not yet confirmed published — check `npm view @fahadhussain777/magento-mcp version` before assuming it matches).
 
+### Phase 3.8 — guard.ts blocklist hardening (2026-08-20)
+
+User-requested safety review turned up two gaps in `src/db/guard.ts`'s defense-in-depth blocklist (not the primary safety boundary, which remains the DB user's SELECT-only grants):
+
+- [x] `FORBIDDEN_KEYWORDS` was missing timing/DoS primitives (`SLEEP`, `BENCHMARK`, `GET_LOCK`, `PROCEDURE ANALYSE`) — these passed through untouched and could tie up a pool connection beyond what the best-effort query timeout catches.
+- [x] `SENSITIVE_TABLES` was missing `oauth_consumer` and `integration` — both store the same class of OAuth credential material this server itself uses to authenticate.
+- [x] Tests added to `guard.test.ts` for both. Suite now 48 tests (was 47), all passing; `tsc --noEmit` clean.
+- Noted but not actioned (blocklists are inherently incomplete): moving `run_readonly_sql` to a table allowlist, and audit logging for confirmed-destructive REST calls / raw SQL — flagged to the user, deferred pending a decision on scope.
+
 ### Phase 3.7 — Configurable OAuth1 signature method (2026-08-19)
 
 User's real Magento instance rejected every REST request: `{"message":"Signature method %1 is not supported","parameters":["HMAC-SHA1"]}` — that instance requires HMAC-SHA256, not the HMAC-SHA1 hardcoded since Phase 3.5.

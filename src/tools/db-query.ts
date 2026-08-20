@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { config } from "../config.js";
 import { runReadOnlyQuery } from "../db/pool.js";
 import { assertSafeSelect, QueryRejectedError } from "../db/guard.js";
 import { errorResult, jsonResult } from "./shared.js";
@@ -34,6 +35,11 @@ const PREBUILT_QUERIES: Record<string, string> = {
 };
 
 export function registerDbTools(server: McpServer): void {
+  if (!config.db) {
+    console.error("MAGENTO_DB_HOST not set — DB tools disabled, running REST/GraphQL-only.");
+    return;
+  }
+
   server.tool(
     "run_readonly_sql",
     "Execute a raw read-only SQL SELECT query directly against the live Magento MySQL database " +
