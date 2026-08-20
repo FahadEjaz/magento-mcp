@@ -1,10 +1,10 @@
 {
   "name": "@fahadhussain777/magento-mcp",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "MCP server exposing Magento 2 REST, GraphQL, and read-only DB access to AI assistants",
   "type": "module",
   "license": "MIT",
-  "author": "Fahad Hussain <fahad@devteampro.com>",
+  "author": "Fahad Hussain <fahad_ejazhussain@live.com>",
   "keywords": [
     "mcp",
     "magento",
