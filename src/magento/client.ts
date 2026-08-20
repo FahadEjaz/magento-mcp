@@ -3,30 +3,38 @@ import { getOAuthHeader } from "./oauth.js";
 import { MagentoApiError, type MagentoErrorBody, type SearchCriteria } from "./types.js";
 
 export function buildSearchCriteriaQuery(criteria: SearchCriteria): string {
-  const params = new URLSearchParams();
+  // oauth-1.0a's deParam() percent-decodes query VALUES but not KEYS (see
+  // node_modules/oauth-1.0a/oauth-1.0a.js), so a URLSearchParams-encoded key
+  // like `searchCriteria%5BpageSize%5D` gets double-encoded into the OAuth1
+  // signature base string and Magento rejects the signature. Keep keys as
+  // literal `[`/`]` (valid in a query string either way) and only
+  // percent-encode values, so the key oauth-1.0a extracts from the URL
+  // matches the literal key we built it from.
+  const pairs: string[] = [];
+  const set = (key: string, value: string) => pairs.push(`${key}=${encodeURIComponent(value)}`);
 
   criteria.filterGroups?.forEach((group, groupIndex) => {
     group.filters.forEach((filter, filterIndex) => {
       const prefix = `searchCriteria[filterGroups][${groupIndex}][filters][${filterIndex}]`;
-      params.set(`${prefix}[field]`, filter.field);
-      params.set(`${prefix}[value]`, String(filter.value));
-      params.set(`${prefix}[conditionType]`, filter.conditionType ?? "eq");
+      set(`${prefix}[field]`, filter.field);
+      set(`${prefix}[value]`, String(filter.value));
+      set(`${prefix}[conditionType]`, filter.conditionType ?? "eq");
     });
   });
 
   criteria.sortOrders?.forEach((sort, index) => {
-    params.set(`searchCriteria[sortOrders][${index}][field]`, sort.field);
-    params.set(`searchCriteria[sortOrders][${index}][direction]`, sort.direction);
+    set(`searchCriteria[sortOrders][${index}][field]`, sort.field);
+    set(`searchCriteria[sortOrders][${index}][direction]`, sort.direction);
   });
 
   if (criteria.pageSize !== undefined) {
-    params.set("searchCriteria[pageSize]", String(criteria.pageSize));
+    set("searchCriteria[pageSize]", String(criteria.pageSize));
   }
   if (criteria.currentPage !== undefined) {
-    params.set("searchCriteria[currentPage]", String(criteria.currentPage));
+    set("searchCriteria[currentPage]", String(criteria.currentPage));
   }
 
-  return params.toString();
+  return pairs.join("&");
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
