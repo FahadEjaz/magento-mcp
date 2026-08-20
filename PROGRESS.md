@@ -118,6 +118,172 @@ User's real Magento instance rejected every REST request: `{"message":"Signature
   - Both caveats documented in README's "Local dev with self-signed certs" section so this doesn't cost another debugging pass next restart.
   - GraphQL still broken with the same pre-existing server-side schema error (`"Config element \"ID\" is not declared in GraphQL schema"`, reproducible even on `{ __typename }`) — unrelated to OAuth, still needs attention on the Magento instance itself, not this codebase.
 
+### Phase 3.9 — Optional DB mode & OAuth searchCriteria encoding fix (2026-08-20)
+
+- [x] **Made DB optional when `MAGENTO_DB_HOST` is unset:** `src/config.ts` returns `config.db = null` when `MAGENTO_DB_HOST` is not set. `src/tools/db-query.ts` (`registerDbTools`) logs that DB tools are disabled and returns without registering them. `src/db/pool.ts` (`initPool`) throws a clear error if called when DB is not configured. Allows running the MCP server in REST/GraphQL-only mode without requiring MySQL connection environment variables.
+- [x] **OAuth1 `searchCriteria` query key encoding fix:** `src/magento/client.ts` (`buildSearchCriteriaQuery`) refactored. `oauth-1.0a`'s `deParam()` function percent-decodes query string values but leaves keys intact (`searchCriteria[pageSize]`). Standard `URLSearchParams` percent-encodes brackets in keys (`searchCriteria%5BpageSize%5D`), which caused `oauth-1.0a` to produce a mismatched signature base string and Magento to reject requests. Fixed by manually percent-encoding query values while keeping key brackets literal.
+
+## Phase 6 — Full-project review: findings + remediation plan (2026-08-20)
+
+Two reviews landed on the same day, from opposite directions. Both are recorded here **before** any
+fix work, so the plan below is the single source of truth for what's actually wrong right now.
+
+1. **Code-level analysis** (this session, over all of `src/`) — found 5 real bugs, 3 security-depth
+   gaps, and a set of robustness/coverage gaps.
+2. **External posture review** (user-supplied, `~/Downloads/magento-mcp-security-review.txt`, from a
+   ChatGPT session titled "Assess Package Security") — reviewed the **public GitHub repo + README +
+   tool list only, not the source**. Rated the project "reasonably designed, but not something to
+   give unrestricted production Magento access to yet." Found no backdoor/malware.
+
+**How the two relate:** they barely overlap, which is the useful part. The external review is a
+deployment-posture review and its findings are almost all ops/config/docs. It could not see any of
+the code bugs below. Note one place it is actively wrong: it rates *"SQL injection protection:
+Green — reasonable defense in depth"* and credits the guard with *"applies row limits"* — finding
+6.1 below is a verified bypass of exactly that row limit. Do not treat its Greens as code-level
+assurance; it never read `guard.ts`.
+
+Baseline at time of review: 48 tests passing, `tsc --noEmit` clean.
+
+### 6.1 — P0 bugs found by code review (all verified by execution, none fixed yet)
+
+- [ ] **`db/guard.ts:100` — row cap silently bypassed by a trailing SQL comment.** `LIMIT_PATTERN`
+      is anchored to `$`, so a query ending in a comment has no match, falls through to the append
+      path at `guard.ts:107`, and the appended clause lands *inside the comment*. Verified:
+      `SELECT 1 FROM quote LIMIT 10 -- note` → `SELECT 1 FROM quote LIMIT 10 -- note LIMIT 500`, and
+      `SELECT * FROM sales_order -- x` returns the whole table uncapped. Fix: strip trailing
+      `--`/`/* */` comments off the *masked* copy before `enforceLimit`, the same way `guard.ts:65`
+      already handles a comment after a trailing semicolon. This is the third distinct bug in this
+      one function (see Phase 3 code-review and Phase 3.8) — the fix should come with regression
+      tests for comment + semicolon + both LIMIT forms together.
+- [ ] **`config.ts:69-71` — a malformed numeric env var poisons the row cap.** `Number(...)` of a
+      typo'd `MAGENTO_DB_MAX_ROWS` yields `NaN`; `rowCount <= NaN` is false, so `enforceLimit` emits
+      a literal `LIMIT NaN` and *every* DB query fails. Same unchecked `Number()` on
+      `MAGENTO_DB_PORT`, `_POOL_SIZE`, `_QUERY_TIMEOUT_MS`, `MAGENTO_DB_SSH_PORT`. Fix: numeric parse
+      helpers with `Number.isFinite` + range validation, failing fast at config load like
+      `required()` already does.
+- [ ] **`db/pool.ts:11,27` + `index.ts` — SSH tunnel is never closed, process can't exit.**
+      `tunnelHandle` is assigned and then never read. The tunnel's `net.createServer` listener keeps
+      the event loop alive, and there is no `SIGINT`/`SIGTERM`/stdin-close handler and no
+      `pool.end()`. Fix: export a `closeDb()` from `pool.ts` (close tunnel, end pool) and wire
+      shutdown handlers in `index.ts`.
+- [ ] **`tools/db-query.ts:8-35` — the 3 prebuilt queries bypass the row cap.** Their `LIMIT 20/100/100`
+      is hardcoded and never passes through `enforceLimit`, so with `MAGENTO_DB_MAX_ROWS=50`,
+      `low_stock_items` still returns 100 rows. Fix: route them through `assertSafeSelect` too —
+      which doubles as a startup self-test that the guard accepts our own queries.
+- [ ] **`index.ts:16` — version drift.** Hardcoded `0.1.0` in the `McpServer` constructor vs
+      `0.1.6` in `package.json`, so clients report the wrong version. Fix: derive from
+      `package.json`. (Also still open from Phase 4: confirm what's actually published with
+      `npm view @fahadhussain777/magento-mcp version` — local is at `0.1.6`.)
+
+### 6.2 — Runtime tool gating (raised by the external review; the highest-leverage item on either list)
+
+The external review's central recommendation is to start read-only and "initially disable or tightly
+restrict" the 9 destructive tools plus `run_readonly_sql`. **That is currently impossible without
+editing source** — every tool registers unconditionally in `index.ts:19-28`, and `.env.example` has
+no feature flags at all. This also subsumes the "table allowlist for `run_readonly_sql`" item
+deferred at the end of Phase 3.8.
+
+- [ ] Gate at **registration** time, not call time — an unregistered tool cannot be invoked and the
+      model never sees it in the tool list, which is strictly stronger than refusing at call time.
+- [ ] Proposed env surface: `MAGENTO_MCP_MODE=read-only|full` (read-only skips every confirm-gated
+      tool), `MAGENTO_MCP_ENABLE_RAW_SQL=false` (keeps the 3 prebuilt insight queries),
+      `MAGENTO_MCP_DISABLED_TOOLS=refund_order,set_config_value` (explicit per-tool opt-out).
+- [ ] Additive only — the `confirm` gate stays exactly as-is on every write tool per CLAUDE.md's
+      non-negotiable rule. Gating is a second, outer boundary, not a replacement.
+- [ ] Decide default mode. Leaning `full` to avoid breaking existing installs at a patch version,
+      with the README leading on `read-only`; revisit for a 0.2.0.
+
+### 6.3 — Security depth (code review + external review agree on the direction)
+
+- [ ] **`db/ssh-tunnel.ts:65-72` — SSH host key is not verified.** No `hostVerifier`/`hostHash` in
+      `conn.connect()`, so ssh2 accepts *any* host key and the tunnel is MITM-able. Fix: optional
+      `MAGENTO_DB_SSH_HOST_FINGERPRINT` and reject on mismatch; when unset, at minimum warn on
+      stderr. (Not caught by either review — found reading the source.)
+- [ ] **`db/guard.ts:27` — `mysql.*` / `performance_schema.*` / `sys.*` not in `SENSITIVE_TABLES`.**
+      `SELECT user, authentication_string FROM mysql.user` passes the guard (verified). A correctly
+      scoped SELECT-only user has no grant on `mysql`, so the real boundary holds — but blocklist
+      depth is this file's entire purpose. Keep `information_schema` **allowed** (it is the only
+      schema-discovery path we have — see 6.5) or put it behind its own flag.
+- [ ] **Credential/PII column blocklist.** `SELECT email, password_hash FROM customer_entity` passes
+      (verified). Add `password_hash`, `password`, `rp_token`, `api_key`, `token`, `secret` as a
+      column-level blocklist alongside the table list. This is the concrete form of the external
+      review's only Orange rating ("sensitive data exposure — possible through read access").
+- [ ] **`confirm: true` is not an authorization boundary** (external review's point 1, and correct —
+      the agent can set the flag itself). Keep `confirm`, then layer: MCP tool `annotations`
+      (`readOnlyHint`/`destructiveHint`/`idempotentHint`) so clients can gate natively, and MCP
+      **elicitation** (`elicitInput`) for genuine human-in-the-loop on `refund_order`, `delete_*`,
+      `set_config_value`. That is the "human approval" step in the external review's proposed
+      architecture, done in-protocol instead of by convention.
+- [ ] Consider whether `abandoned_carts` handing customer emails to an LLM should itself be opt-in.
+
+### 6.4 — Documentation / deployment posture (all from the external review; all verified real)
+
+- [ ] **`README.md:47-48` uses `CREATE USER 'mcp_readonly'@'%'`** — any host can authenticate as that
+      user. Change the documented example to `@'localhost'` (or a specific private IP), with a note
+      on which host to use in the SSH-tunnel case. Worth noting the Phase 2 real-instance setup
+      created the user as `'mcp_readonly'@'%'` too, following this same README — so the local
+      instance should be tightened alongside the docs.
+- [ ] **No Magento Integration ACL guidance** — README never says which API resources to grant, so
+      users will tick "All" (which the external review rates Red). Add a table mapping tool groups
+      to the minimum Magento resources they need.
+- [ ] **`README.md:58` MCP config example is `"args": ["-y", "@fahadhussain777/magento-mcp"]`** —
+      resolves to latest on every launch. Pin a version in the documented example and mention
+      `npm ci` / `npm audit` for repo users. (`package-lock.json` *is* already committed — the
+      external review's "keep package-lock.json" item is already satisfied; only the npx example
+      and the audit habit are genuine gaps.)
+
+### 6.5 — Robustness, coverage, tooling (code review only)
+
+- [ ] **No request timeout anywhere** — `magento/client.ts:46` and `graphql/client.ts:4` both use bare
+      `fetch`/`GraphQLClient` with no `AbortSignal.timeout()`, so a hung Magento leaves an MCP tool
+      call pending forever. Add `MAGENTO_REQUEST_TIMEOUT_MS` (default ~30s) to both.
+- [ ] **`MagentoApiError.status` is discarded at the tool layer** — errors throw past the handlers and
+      the SDK stringifies them, losing status and `parameters`. "SKU not found" (404) vs "OAuth
+      signature rejected" (401) is a large difference to the model. `errorResult` already exists
+      (`tools/shared.ts:19`) and is only used by `db-query.ts`.
+- [ ] **No 429/503 handling** — add one `Retry-After` backoff retry, **GET only** (POST/PUT/DELETE are
+      not idempotent).
+- [ ] **Zero tests for `src/tools/*`** — 10 tool files, 0 tests. Highest-value case: assert that
+      `confirm:false` returns a preview and fires **no** HTTP call, for every gated tool. That is
+      CLAUDE.md's non-negotiable rule and nothing currently enforces it.
+- [ ] **`WITH`/CTE queries are rejected** (`guard.ts:74` requires `^select\b`) — analytical reporting
+      is exactly where CTEs earn their keep. Allow a leading `WITH ... SELECT`, verifying no DML in
+      the body.
+- [ ] **`REPLACE()` false positive** (`guard.ts:11`) — `SELECT REPLACE(sku,'a','b')` is rejected
+      (verified). Match `\breplace\s+into\b` / statement-leading `replace` instead of the bare word.
+      Same false-positive class as the `update`/`updated_at` bug from Phase 1.
+- [ ] **No response trimming** — `list_categories` (`catalog.ts:77`) returns the entire category tree
+      and `get_product` every EAV attribute; both can exhaust the context window on a real store.
+      Add an optional `fields` param mapping to Magento's REST `fields=` parameter.
+- [ ] **No schema-discovery tool** — the model has to guess Magento table/column names when writing
+      raw SQL (and Phase 2 already flagged that our own prebuilt queries were written from memory
+      and are still unverified). A `describe_table`/`list_tables` tool over `information_schema`
+      would fix both.
+- [ ] **No lint/format/CI** — no eslint, no prettier, no `.github/workflows`. `prepublishOnly` is the
+      only gate and it runs on the publisher's machine.
+- [ ] **Domain gaps** — no invoices/shipments/credit-memos, no order comments, no product
+      attributes/attribute sets. Per CLAUDE.md these go in new `tools/*.ts` files (e.g.
+      `tools/sales-documents.ts`), not by growing existing ones.
+
+### 6.6 — Execution order
+
+Ordered by blast-radius reduction per unit of work. Each step ends green (`npm test` +
+`tsc --noEmit`) before the next starts.
+
+1. **6.2 tool gating** — biggest single risk reduction, and it unblocks the external review's whole
+   "restricted initial tool set" recommendation. One new module (or a `features` block in
+   `config.ts`) + `index.ts` wiring + tests asserting disabled tools are absent from the tool list.
+2. **6.1 P0 bugs** — five small, independent, unit-testable fixes. No live Magento needed.
+3. **6.3 security depth** — SSH host verification, `mysql.*` tables, credential-column blocklist.
+   Annotations + elicitation can follow separately (they touch all 10 tool files).
+4. **6.4 docs** — cheap, and the `@'%'` grant is a real live-instance exposure, not just a doc typo.
+5. **6.5** — timeouts and error shaping first (they change behaviour), then tool tests, then
+   lint/CI, then the guard ergonomics (CTE, `REPLACE()`), then response trimming, schema
+   discovery, and new domains last.
+
+Phase 2's real-instance verification items stay open and blocked independently of all of the above;
+none of this work needs a live instance, which is why it can proceed now.
+
 ## Phase 5 — Optional expansion (only if needed)
 
 - [ ] HTTP/SSE transport for hosted/remote use (currently stdio-only, local-process model)
